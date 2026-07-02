@@ -109,5 +109,24 @@ class TestZeroOS(unittest.TestCase):
         self.assertTrue(len(suggestions) > 0)
         self.assertTrue("Become top AIML student" in suggestions[0])
 
+    def test_conversational_suggestion(self):
+        from core.kernel import ZeroKernel
+        kernel = ZeroKernel()
+        # Use test db & memory store
+        kernel.db = self.db
+        kernel.memory_store = self.memory_store
+        
+        # Simulate active suggestion
+        kernel.last_suggestion = {
+            "text": "Study AIML student goal?",
+            "action": "open_app",
+            "params": {"app_name": "code"},
+            "habit": "study ML"
+        }
+        
+        reply = kernel.handle_command("yeah")
+        self.assertTrue("logged your study activity" in reply.lower())
+        self.assertIsNone(kernel.last_suggestion)
+
 if __name__ == "__main__":
     unittest.main()

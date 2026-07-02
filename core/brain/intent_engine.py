@@ -101,6 +101,38 @@ class IntentEngine:
     def _parse_single_phrase(self, text):
         text_lower = text.lower().strip()
         
+        # Conversational / Affirmation Checks
+        positives = ["yes", "yeah", "sure", "ok", "yep", "yup", "do it", "agree", "okay", "fine", "correct"]
+        negatives = ["no", "nope", "nah", "don't", "not now", "cancel", "negative", "nop", "never"]
+        if text_lower in positives:
+            return {
+                "action": "affirmation",
+                "params": {"value": True},
+                "response": "Processing confirmation."
+            }
+        if text_lower in negatives:
+            return {
+                "action": "affirmation",
+                "params": {"value": False},
+                "response": "Processing cancellation."
+            }
+
+        greetings = ["hello", "hi", "hey", "good morning", "good evening", "good afternoon", "wassup", "sup"]
+        if any(g == text_lower or text_lower.startswith(g + " ") for g in greetings):
+            return {
+                "action": "greeting",
+                "params": {},
+                "response": "Hello!"
+            }
+
+        thanks = ["thank you", "thanks", "thank", "appreciate it"]
+        if any(t in text_lower for t in thanks):
+            return {
+                "action": "gratitude",
+                "params": {},
+                "response": "You're welcome!"
+            }
+            
         # 1. Open URL/Website
         url_match = re.search(r"\b(?:open|go\s+to|visit)\s+([a-z0-9\-]+\.[a-z]{2,}(?:\/[^\s]*)?)", text_lower)
         if url_match:

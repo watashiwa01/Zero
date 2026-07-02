@@ -31,6 +31,7 @@ class ZeroKernel:
         self.browser = BrowserAgent()
         self.goals_mgr = GoalsManager(self.db)
         self.session_id = "default_session"
+        self.last_suggestion = None  # Tracks active suggestion context
         
         # Populate defaults on startup if empty
         self._bootstrap_default_goals()
@@ -59,10 +60,65 @@ class ZeroKernel:
         actions = intent_response.get("actions", [])
         base_reply = intent_response.get("response", "")
 
-        # 2. Plan execution sequence
+        # 2. Check if the intent is a conversational response to a pending suggestion or general chat
+        if len(actions) == 1 and actions[0].get("action") in ["affirmation", "greeting", "gratitude", "chat"]:
+            conv_action = actions[0].get("action")
+            params = actions[0].get("params", {})
+            
+            if conv_action == "affirmation":
+                val = params.get("value", True)
+                if self.last_suggestion:
+                    sugg = self.last_suggestion
+                    self.last_suggestion = None  # Clear suggestion
+                    
+                    if val:
+                        # Log the suggested habit
+                        if "habit" in sugg:
+                            self.memory_store.log_habit_activity(sugg["habit"])
+                        
+                        # Run the suggestion's target action
+                        res = None
+                        if sugg.get("action") == "open_app":
+                            res = self.system.open_app(sugg["params"].get("app_name", ""))
+                        elif sugg.get("action") == "search_web":
+                            res = self.browser.search_google(sugg["params"].get("query", ""))
+                        elif sugg.get("action") == "store_memory":
+                            res = f"Stored memory: \"{sugg['params'].get('content', '')}\""
+                            self.db.save_memory(sugg["params"].get("content", ""))
+                            
+                        outcome = res if res else "Suggestion executed."
+                        final_res = f"Awesome, Varun! I've logged your study activity and started that for you: {outcome}"
+                    else:
+                        final_res = "No problem, Varun. Let me know when you're ready to focus on it."
+                else:
+                    final_res = "Alright, Varun."
+                    
+            elif conv_action == "greeting":
+                self.last_suggestion = None
+                final_res = "Hello Varun! How can I help you today?"
+                
+            elif conv_action == "gratitude":
+                self.last_suggestion = None
+                final_res = "You're very welcome, Varun. Always happy to assist!"
+                
+            else:  # General chat fallback
+                if self.last_suggestion:
+                    final_res = f"I'm here, Varun. I had suggested: '{self.last_suggestion['text']}'. What would you like to do?"
+                else:
+                    final_res = f"I heard you, Varun. What would you like me to open or remember?"
+            
+            # Save logs and return
+            self.db.save_conversation(self.session_id, "user", user_input_clean)
+            self.db.save_conversation(self.session_id, "assistant", final_res)
+            return final_res
+
+        # If it's a structural command, reset the last suggestion
+        self.last_suggestion = None
+
+        # 3. Plan execution sequence
         plan = self.task_planner.plan_steps(actions)
 
-        # 3. Execution Loop
+        # 4. Execution Loop
         action_results = []
         last_action_type = None
         last_params = {}
@@ -77,7 +133,6 @@ class ZeroKernel:
             if action == "open_app":
                 app_name = params.get("app_name", "")
                 res = self.system.open_app(app_name)
-                # If opening development/study apps, log habit activity
                 if "code" in app_name.lower() or "vs" in app_name.lower():
                     self.memory_store.log_habit_activity("study ML")
                     
@@ -127,7 +182,7 @@ class ZeroKernel:
             if res:
                 action_results.append(res)
 
-        # 4. Gather execution context for personality enhancement
+        # 5. Gather execution context for personality enhancement
         context = {}
         try:
             battery = psutil.sensors_battery()
@@ -148,7 +203,7 @@ class ZeroKernel:
         else:
             combined_res = base_reply
 
-        # 5. Personality Enhancement
+        # 6. Personality Enhancement
         final_reply = self.personality.enhance_response(
             combined_res,
             action_type=last_action_type,
@@ -156,7 +211,7 @@ class ZeroKernel:
             context=context
         )
 
-        # 6. Save turn logs to DB
+        # 7. Save turn logs to DB
         self.db.save_conversation(self.session_id, "user", user_input_clean)
         self.db.save_conversation(self.session_id, "assistant", final_reply)
         
@@ -165,5 +220,21 @@ class ZeroKernel:
     def get_proactive_suggestion(self):
         suggestions = self.reflection.generate_reflection_suggestions()
         if suggestions:
-            return suggestions[0]
+            suggestion_text = suggestions[0]
+            # Store the suggestion context and map its logical positive outcomes
+            self.last_suggestion = {
+                "text": suggestion_text,
+                "action": "open_app",
+                "params": {"app_name": "code"},
+                "habit": "study ML"
+            }
+            if "ai900" in suggestion_text.lower():
+                self.last_suggestion["action"] = "search_web"
+                self.last_suggestion["params"] = {"query": "Microsoft Azure AI Fundamentals study guide"}
+            elif "workout" in suggestion_text.lower():
+                self.last_suggestion["action"] = "store_memory"
+                self.last_suggestion["params"] = {"content": "Worked out today"}
+                self.last_suggestion["habit"] = "workout"
+                
+            return suggestion_text
         return None
