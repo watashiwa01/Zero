@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Zero 3D Hologram</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: rgba(0, 0, 0, 0);
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-app-region: drag; /* Allows dragging the window by clicking the avatar */
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+    <!-- Include Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <script>
+        // State configurations
+        const STATES = {
+            idle: {
+                color: 0x4d4dff,      // Deep Blue/Purple
+                glowColor: 0x9933ff,
+                speed: 1.0,
+                pulseRate: 0.015,
+                ringSpeed: 0.01
+            },
+            listening: {
+                color: 0x00ffff,      // Bright Cyan
+                glowColor: 0x0088ff,
+                speed: 3.5,
+                pulseRate: 0.12,
+                ringSpeed: 0.05
+            },
+            thinking: {
+                color: 0xff00ff,      // Hot Magenta/Pink
+                glowColor: 0xff0055,
+                speed: 5.0,
+                pulseRate: 0.08,
+                ringSpeed: 0.08
+            },
+            speaking: {
+                color: 0x00ffaa,      // Teal/Mint Green
+                glowColor: 0x00aa55,
+                speed: 2.5,
+                pulseRate: 0.06,
+                ringSpeed: 0.03
+            }
+        };
+
+        let currentState = 'idle';
+        let targetState = 'idle';
+        let transitionProgress = 1.0;
+
+        // Setup Three.js Scene
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        
+        // Transparent Renderer
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 8;
+
+        // Core Objects Group
+        const hologramGroup = new THREE.Group();
+        scene.add(hologramGroup);
+
+        // 1. Create Core Sphere (Hologram Core)
+        const coreGeo = new THREE.SphereGeometry(1.2, 32, 32);
+        // Custom Wireframe Material with glowing properties
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: STATES.idle.color,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.8
+        });
+        const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+        hologramGroup.add(coreMesh);
+
+        // 2. Create Outer Orbiting Rings
+        const ringGeo1 = new THREE.TorusGeometry(1.8, 0.04, 8, 64);
+        const ringMat1 = new THREE.MeshBasicMaterial({ color: 0x4d4dff, transparent: true, opacity: 0.6 });
+        const ring1 = new THREE.Mesh(ringGeo1, ringMat1);
+        ring1.rotation.x = Math.PI / 3;
+        hologramGroup.add(ring1);
+
+        const ringGeo2 = new THREE.TorusGeometry(2.1, 0.03, 8, 64);
+        const ringMat2 = new THREE.MeshBasicMaterial({ color: 0x9933ff, transparent: true, opacity: 0.4 });
+        const ring2 = new THREE.Mesh(ringGeo2, ringMat2);
+        ring2.rotation.y = Math.PI / 4;
+        hologramGroup.add(ring2);
+
+        // 3. Create Swirling Particles (Brain Cells / Data points)
+        const particleGeo = new THREE.BufferGeometry();
+        const particleCount = 200;
+        const positions = new Float32Array(particleCount * 3);
+        const originalPositions = [];
+
+        for (let i = 0; i < particleCount; i++) {
+            // Distribute particles in a shell around the core
+            const u = Math.random();
+            const v = Math.random();
+            const theta = u * 2.0 * Math.PI;
+            const phi = Math.acos(2.0 * v - 1.0);
+            
+            // Radii between 2.2 and 2.8
+            const r = 2.2 + Math.random() * 0.6;
+            
+            const x = r * Math.sin(phi) * Math.cos(theta);
+            const y = r * Math.sin(phi) * Math.sin(theta);
+            const z = r * Math.cos(phi);
+            
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
+            
+            originalPositions.push({ x, y, z, r, theta, phi });
+        }
+
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const particleMat = new THREE.PointsMaterial({
+            size: 0.08,
+            color: 0x9933ff,
+            transparent: true,
+            opacity: 0.7,
+            sizeAttenuation: true
+        });
+        const particles = new THREE.Points(particleGeo, particleMat);
+        hologramGroup.add(particles);
+
+        // Handle Window Resizing
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Expose function for Python webview calls
+        window.setAvatarState = function(state) {
+            if (STATES[state]) {
+                targetState = state;
+                transitionProgress = 0.0;
+            }
+        };
+
+        // Animation Loop
+        let clock = new THREE.Clock();
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            // Smooth State Transitions (Lerp Colors & Values)
+            if (transitionProgress < 1.0) {
+                transitionProgress += delta * 2.0; // Transition over 0.5s
+                if (transitionProgress > 1.0) transitionProgress = 1.0;
+                
+                const c1 = STATES[currentState].color;
+                const c2 = STATES[targetState].color;
+                
+                // Color Lerp
+                const color = new THREE.Color(c1).lerp(new THREE.Color(c2), transitionProgress);
+                coreMat.color.copy(color);
+                ringMat1.color.copy(color);
+                particleMat.color.copy(color);
+                
+                if (transitionProgress === 1.0) {
+                    currentState = targetState;
+                }
+            }
+
+            const stateConfig = STATES[currentState];
+            
+            // Dynamic Pulsing (Scale and Vertex distortion simulation)
+            let pulseScale = 1.0;
+            if (currentState === 'listening') {
+                // Soundwave-like high frequency vibration
+                pulseScale = 1.0 + Math.sin(time * 30.0) * 0.12 * Math.cos(time * 8.0);
+            } else if (currentState === 'speaking') {
+                // Rhythmic speaking pulses
+                pulseScale = 1.0 + Math.abs(Math.sin(time * 10.0)) * 0.25;
+            } else if (currentState === 'thinking') {
+                // Intense vibrating loading pulse
+                pulseScale = 1.0 + Math.sin(time * 20.0) * 0.08;
+            } else {
+                // Idle slow breathing
+                pulseScale = 1.0 + Math.sin(time * 2.0) * 0.06;
+            }
+            coreMesh.scale.set(pulseScale, pulseScale, pulseScale);
+
+            // Orbit Rotation
+            hologramGroup.rotation.y += stateConfig.ringSpeed;
+            hologramGroup.rotation.x += stateConfig.ringSpeed * 0.5;
+            
+            ring1.rotation.z += stateConfig.ringSpeed * 1.5;
+            ring2.rotation.z -= stateConfig.ringSpeed * 1.8;
+
+            // Animate Particles (Swirl effect around core)
+            const positionsAttr = particleGeo.attributes.position;
+            for (let i = 0; i < particleCount; i++) {
+                const orig = originalPositions[i];
+                
+                // Slowly change theta/phi for orbit motion
+                orig.theta += stateConfig.ringSpeed * 0.2;
+                
+                // Speeds adjust on state
+                let currentRadius = orig.r;
+                if (currentState === 'thinking') {
+                    // Particles pull in closer during thinking
+                    currentRadius = orig.r - 0.4 + Math.sin(time * 5.0 + i) * 0.1;
+                } else if (currentState === 'listening') {
+                    // Particles vibrate outward
+                    currentRadius = orig.r + Math.sin(time * 15.0 + i) * 0.15;
+                }
+                
+                const x = currentRadius * Math.sin(orig.phi) * Math.cos(orig.theta);
+                const y = currentRadius * Math.sin(orig.phi) * Math.sin(orig.theta);
+                const z = currentRadius * Math.cos(orig.phi);
+                
+                positionsAttr.setXYZ(i, x, y, z);
+            }
+            positionsAttr.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+
+        // Run
+        animate();
+    </script>
+</body>
+</html>
