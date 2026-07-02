@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Zero 3D Hologram Assistant</title>
+    <title>Zero Custom 3D Puppet</title>
     <style>
         body, html {
             margin: 0;
@@ -13,7 +13,7 @@
             background-color: rgba(0, 0, 0, 0);
             user-select: none;
             -webkit-user-select: none;
-            -webkit-app-region: drag; /* Drag window by clicking anywhere */
+            -webkit-app-region: drag;
         }
         #canvas-container {
             width: 100%;
@@ -26,42 +26,39 @@
             display: block;
         }
     </style>
-    <!-- Include Three.js from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
     <div id="canvas-container"></div>
 
     <script>
-        // State configurations
+        // Colors from reference image
+        const SKIN_COLOR = 0xc2a6de;       // Lavender/purple skin
+        const OUTFIT_COLOR = 0x1f1d24;     // Dark charcoal
+        const HAT_COLOR = 0x3d274c;        // Purple hat/horns
+        const ACCENT_COLOR = 0x39ff14;     // Neon green
+
+        // State parameters
         const STATES = {
             idle: {
-                color: 0x4d4dff,       // Deep Blue
-                glowColor: 0x9933ff,
+                color: ACCENT_COLOR,
                 speed: 1.0,
-                pulseRate: 0.015,
-                mouthMovement: 0.0
+                pose: 'idle'
             },
             listening: {
-                color: 0x00ffff,       // Bright Cyan
-                glowColor: 0x0088ff,
+                color: 0x00ffff,           // Cyan pulse during listening
                 speed: 2.0,
-                pulseRate: 0.05,
-                mouthMovement: 0.0
+                pose: 'listening'
             },
             thinking: {
-                color: 0xff00ff,       // Magenta/Pink
-                glowColor: 0xff0055,
-                speed: 4.0,
-                pulseRate: 0.08,
-                mouthMovement: 0.0
+                color: 0xff00ff,           // Magenta pulse during thinking
+                speed: 3.0,
+                pose: 'thinking'
             },
             speaking: {
-                color: 0x00ffaa,       // Teal/Mint Green
-                glowColor: 0x00aa55,
+                color: 0x00ffaa,           // Mint green pulse during speaking
                 speed: 1.5,
-                pulseRate: 0.06,
-                mouthMovement: 1.0 // Activates mouth lip-sync
+                pose: 'speaking'
             }
         };
 
@@ -69,7 +66,7 @@
         let targetState = 'idle';
         let transitionProgress = 1.0;
 
-        // Setup Three.js
+        // Setup Scene
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         
@@ -79,168 +76,267 @@
         container.appendChild(renderer.domElement);
 
         const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 7;
-        camera.position.y = 0.2;
+        camera.position.set(0, 0.5, 6.2);
+        camera.lookAt(0, 0, 0);
 
-        // Cyber-Assistant Group
-        const characterGroup = new THREE.Group();
-        scene.add(characterGroup);
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
 
-        // Materials setup
-        const faceMat = new THREE.MeshBasicMaterial({
-            color: 0xddddff,
-            transparent: true,
-            opacity: 0.5,
-            wireframe: false
-        });
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(2, 4, 5);
+        scene.add(dirLight);
 
-        const activeWireMat = new THREE.MeshBasicMaterial({
-            color: STATES.idle.color,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.8
-        });
+        // Grid floor matching the image
+        const gridHelper = new THREE.GridHelper(8, 16, 0x444455, 0x22222b);
+        gridHelper.position.y = -2.1;
+        scene.add(gridHelper);
 
-        const solidGlowMat = new THREE.MeshBasicMaterial({
-            color: STATES.idle.color,
-            transparent: true,
-            opacity: 0.9
-        });
-
-        // 1. Head (Stylized Cyber-Sphere)
-        const headGeo = new THREE.SphereGeometry(1.0, 16, 16);
-        const head = new THREE.Mesh(headGeo, faceMat);
-        characterGroup.add(head);
-
-        // Head Outer Shell Wireframe
-        const headWireGeo = new THREE.SphereGeometry(1.02, 16, 16);
-        const headWire = new THREE.Mesh(headWireGeo, activeWireMat);
-        characterGroup.add(headWire);
-
-        // 2. Glowing Eyes (2 digital circles)
-        const eyeGeo = new THREE.CircleGeometry(0.12, 16);
-        const leftEye = new THREE.Mesh(eyeGeo, solidGlowMat);
-        leftEye.position.set(-0.35, 0.15, 0.88);
-        leftEye.rotation.y = Math.PI / 12;
-        characterGroup.add(leftEye);
-
-        const rightEye = leftEye.clone();
-        rightEye.position.x = 0.35;
-        rightEye.rotation.y = -Math.PI / 12;
-        characterGroup.add(rightEye);
-
-        // 3. Cyber Visor (futuristic wrap-around plate)
-        const visorGeo = new THREE.CylinderGeometry(1.05, 1.05, 0.35, 32, 1, true, -Math.PI/3, Math.PI * 2/3);
-        const visor = new THREE.Mesh(visorGeo, activeWireMat);
-        visor.position.y = 0.15;
-        visor.rotation.x = Math.PI / 24;
-        characterGroup.add(visor);
-
-        // 4. Digital Mouth (Adjustable capsule shape)
-        const mouthGeo = new THREE.RingGeometry(0.02, 0.08, 16);
-        const mouth = new THREE.Mesh(mouthGeo, solidGlowMat);
-        mouth.position.set(0, -0.3, 0.92);
-        characterGroup.add(mouth);
-
-        // 5. Cyber Hair / Antenna Strands
-        const hairGroup = new THREE.Group();
-        characterGroup.add(hairGroup);
+        // Create Materials
+        const skinMat = new THREE.MeshLambertMaterial({ color: SKIN_COLOR });
+        const outfitMat = new THREE.MeshLambertMaterial({ color: OUTFIT_COLOR });
+        const hatMat = new THREE.MeshLambertMaterial({ color: HAT_COLOR });
         
-        // Hair left strand
-        const strandGeo = new THREE.ConeGeometry(0.08, 1.2, 4);
-        const strandL = new THREE.Mesh(strandGeo, activeWireMat);
-        strandL.position.set(-0.9, -0.2, 0.3);
-        strandL.rotation.z = -Math.PI / 6;
-        hairGroup.add(strandL);
-
-        // Hair right strand
-        const strandR = strandL.clone();
-        strandR.position.x = 0.9;
-        strandR.rotation.z = Math.PI / 6;
-        hairGroup.add(strandR);
-
-        // Hair top cowlick/antenna
-        const antennaGeo = new THREE.ConeGeometry(0.05, 0.6, 4);
-        const antenna = new THREE.Mesh(antennaGeo, activeWireMat);
-        antenna.position.set(0, 1.2, 0);
-        antenna.rotation.x = -Math.PI / 12;
-        hairGroup.add(antenna);
-
-        // 6. Cyber Headphones (Torus/Cylinder caps on sides)
-        const phoneGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.15, 16);
-        const phoneL = new THREE.Mesh(phoneGeo, activeWireMat);
-        phoneL.position.set(-1.0, 0.1, 0);
-        phoneL.rotation.z = Math.PI / 2;
-        characterGroup.add(phoneL);
-
-        const phoneR = phoneL.clone();
-        phoneR.position.x = 1.0;
-        characterGroup.add(phoneR);
-
-        // Glowing headphone ring details
-        const phoneRingGeo = new THREE.TorusGeometry(0.28, 0.03, 8, 32);
-        const phoneRingL = new THREE.Mesh(phoneRingGeo, solidGlowMat);
-        phoneRingL.position.set(-1.08, 0.1, 0);
-        phoneRingL.rotation.y = Math.PI / 2;
-        characterGroup.add(phoneRingL);
-
-        const phoneRingR = phoneRingL.clone();
-        phoneRingR.position.x = 1.08;
-        characterGroup.add(phoneRingR);
-
-        // 7. Holographic floating collar
-        const collarGeo = new THREE.TorusGeometry(1.2, 0.05, 8, 32);
-        const collar = new THREE.Mesh(collarGeo, activeWireMat);
-        collar.position.y = -1.2;
-        collar.rotation.x = Math.PI / 2;
-        characterGroup.add(collar);
-
-        // Orbit Ring
-        const orbitGeo = new THREE.TorusGeometry(1.5, 0.02, 4, 64);
-        const orbit = new THREE.Mesh(orbitGeo, activeWireMat);
-        orbit.position.y = 0;
-        orbit.rotation.x = Math.PI / 3;
-        characterGroup.add(orbit);
-
-        // Floating particles around head
-        const particleGeo = new THREE.BufferGeometry();
-        const pCount = 80;
-        const positions = new Float32Array(pCount * 3);
-        const origPositions = [];
-
-        for (let i = 0; i < pCount; i++) {
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos((Math.random() * 2) - 1);
-            const dist = 1.4 + Math.random() * 0.5;
-
-            const x = dist * Math.sin(phi) * Math.cos(theta);
-            const y = dist * Math.sin(phi) * Math.sin(theta);
-            const z = dist * Math.cos(phi);
-
-            positions[i * 3] = x;
-            positions[i * 3 + 1] = y;
-            positions[i * 3 + 2] = z;
-            origPositions.push({ x, y, z, dist, theta, phi });
-        }
-
-        particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const particleMat = new THREE.PointsMaterial({
-            size: 0.05,
-            color: STATES.idle.color,
+        // Dynamic Glowing Material (Color will blend based on state)
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: ACCENT_COLOR,
             transparent: true,
-            opacity: 0.7
-        });
-        const particles = new THREE.Points(particleGeo, particleMat);
-        characterGroup.add(particles);
-
-        // Handle Resizing
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            opacity: 0.95
         });
 
-        // Set state API for python
+        // Main Character Group
+        const character = new THREE.Group();
+        character.position.y = -0.5; // Offset to sit on grid
+        scene.add(character);
+
+        // --- RIGGING HIERARCHY ---
+
+        // 1. Torso
+        const torsoGeo = new THREE.CylinderGeometry(0.55, 0.45, 1.3, 8);
+        const torso = new THREE.Mesh(torsoGeo, outfitMat);
+        torso.position.y = 0.55;
+        character.add(torso);
+
+        // Belt/Strap details on torso
+        const beltGeo = new THREE.CylinderGeometry(0.58, 0.56, 0.2, 8);
+        const belt = new THREE.Mesh(beltGeo, hatMat);
+        belt.position.y = 0.3;
+        character.add(belt);
+
+        // Collar
+        const collarGeo = new THREE.CylinderGeometry(0.35, 0.45, 0.18, 8);
+        const collar = new THREE.Mesh(collarGeo, outfitMat);
+        collar.position.y = 1.15;
+        character.add(collar);
+
+        // Shoulder pads
+        const padGeo = new THREE.BoxGeometry(0.3, 0.15, 0.3);
+        const padL = new THREE.Mesh(padGeo, glowMat);
+        padL.position.set(-0.6, 1.1, 0);
+        character.add(padL);
+
+        const padR = padL.clone();
+        padR.position.x = 0.6;
+        character.add(padR);
+
+        // 2. Head Group
+        const headGroup = new THREE.Group();
+        headGroup.position.y = 1.45;
+        character.add(headGroup);
+
+        // Face Mesh
+        const faceGeo = new THREE.BoxGeometry(0.42, 0.42, 0.42);
+        const face = new THREE.Mesh(faceGeo, skinMat);
+        headGroup.add(face);
+
+        // Simple Eye Dot / Face expression
+        const eyeDotGeo = new THREE.BoxGeometry(0.04, 0.04, 0.02);
+        const eyeDotMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const lEye = new THREE.Mesh(eyeDotGeo, eyeDotMat);
+        lEye.position.set(-0.1, 0.05, 0.22);
+        headGroup.add(lEye);
+
+        const rEye = lEye.clone();
+        rEye.position.x = 0.1;
+        headGroup.add(rEye);
+
+        // Mouth
+        const mouthGeo = new THREE.BoxGeometry(0.06, 0.02, 0.02);
+        const mouth = new THREE.Mesh(mouthGeo, eyeDotMat);
+        mouth.position.set(0, -0.08, 0.22);
+        headGroup.add(mouth);
+
+        // 3. Curved Horn Hat
+        // Horn center dome
+        const hatDomeGeo = new THREE.SphereGeometry(0.3, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+        const hatDome = new THREE.Mesh(hatDomeGeo, hatMat);
+        hatDome.position.y = 0.2;
+        headGroup.add(hatDome);
+
+        // Left Horn (Angled out)
+        const hornLGeo = new THREE.CylinderGeometry(0.12, 0.3, 0.9, 8);
+        const hornL = new THREE.Mesh(hornLGeo, hatMat);
+        hornL.position.set(-0.55, 0.5, 0);
+        hornL.rotation.z = -Math.PI / 3;
+        headGroup.add(hornL);
+
+        // Right Horn
+        const hornR = hornL.clone();
+        hornR.position.x = 0.55;
+        hornR.rotation.z = Math.PI / 3;
+        headGroup.add(hornR);
+
+        // Dangling Charms
+        const charmGeo = new THREE.SphereGeometry(0.08, 8, 8);
+        const charmL = new THREE.Mesh(charmGeo, skinMat);
+        charmL.position.set(-1.0, 0.2, 0);
+        headGroup.add(charmL);
+
+        const charmR = charmL.clone();
+        charmR.position.x = 1.0;
+        headGroup.add(charmR);
+
+        // Central Hat Eye Plate
+        const eyePlateGeo = new THREE.BoxGeometry(0.48, 0.3, 0.05);
+        const eyePlate = new THREE.Mesh(eyePlateGeo, hatMat);
+        eyePlate.position.set(0, 0.35, 0.2);
+        headGroup.add(eyePlate);
+
+        // Large Eye on plate
+        const bigEyeGeo = new THREE.RingGeometry(0.04, 0.09, 16);
+        const bigEye = new THREE.Mesh(bigEyeGeo, glowMat);
+        bigEye.position.set(0, 0.35, 0.23);
+        headGroup.add(bigEye);
+
+        const pupilGeo = new THREE.CircleGeometry(0.03, 8);
+        const pupil = new THREE.Mesh(pupilGeo, eyeDotMat);
+        pupil.position.set(0, 0.35, 0.24);
+        headGroup.add(pupil);
+
+        // 4. Front Hanging Ribbons
+        const ribbonGeo = new THREE.BoxGeometry(0.1, 0.8, 0.02);
+        const ribbonL = new THREE.Mesh(ribbonGeo, hatMat);
+        ribbonL.position.set(-0.25, -0.15, 0.22);
+        headGroup.add(ribbonL);
+
+        const ribbonR = ribbonL.clone();
+        ribbonR.position.x = 0.25;
+        headGroup.add(rEye.clone()); // Anchor cloned eyes for ribbon details
+        headGroup.add(ribbonR);
+
+        // Tiny eye decorations on ribbons
+        const ribbonEyeGeo = new THREE.CircleGeometry(0.025, 8);
+        const rEyeL1 = new THREE.Mesh(ribbonEyeGeo, glowMat);
+        rEyeL1.position.set(-0.25, -0.05, 0.24);
+        headGroup.add(rEyeL1);
+
+        const rEyeL2 = rEyeL1.clone();
+        rEyeL2.position.y = -0.3;
+        headGroup.add(rEyeL2);
+
+        const rEyeR1 = rEyeL1.clone();
+        rEyeR1.position.x = 0.25;
+        headGroup.add(rEyeR1);
+
+        const rEyeR2 = rEyeL2.clone();
+        rEyeR2.position.x = 0.25;
+        headGroup.add(rEyeR2);
+
+        // 5. LEFT ARM HIERARCHY
+        const leftArmGroup = new THREE.Group();
+        leftArmGroup.position.set(-0.65, 1.0, 0);
+        character.add(leftArmGroup);
+
+        const upperArmLGeo = new THREE.CylinderGeometry(0.12, 0.15, 0.6, 8);
+        const upperArmL = new THREE.Mesh(upperArmLGeo, skinMat);
+        upperArmL.position.y = -0.25;
+        leftArmGroup.add(upperArmL);
+
+        const forearmLGroup = new THREE.Group();
+        forearmLGroup.position.set(0, -0.5, 0);
+        leftArmGroup.add(forearmLGroup);
+
+        const forearmLGeo = new THREE.CylinderGeometry(0.14, 0.12, 0.5, 8);
+        const forearmL = new THREE.Mesh(forearmLGeo, skinMat);
+        forearmL.position.y = -0.2;
+        forearmLGroup.add(forearmL);
+
+        const handLGeo = new THREE.SphereGeometry(0.08, 8, 8);
+        const handL = new THREE.Mesh(handLGeo, outfitMat);
+        handL.position.y = -0.45;
+        forearmLGroup.add(handL);
+
+        // 6. RIGHT ARM HIERARCHY
+        const rightArmGroup = new THREE.Group();
+        rightArmGroup.position.set(0.65, 1.0, 0);
+        character.add(rightArmGroup);
+
+        const upperArmRGeo = new THREE.CylinderGeometry(0.12, 0.15, 0.6, 8);
+        const upperArmR = new THREE.Mesh(upperArmRGeo, skinMat);
+        upperArmR.position.y = -0.25;
+        rightArmGroup.add(upperArmR);
+
+        const forearmRGroup = new THREE.Group();
+        forearmRGroup.position.set(0, -0.5, 0);
+        rightArmGroup.add(forearmRGroup);
+
+        const forearmRGeo = new THREE.CylinderGeometry(0.14, 0.12, 0.5, 8);
+        const forearmR = new THREE.Mesh(forearmRGeo, skinMat);
+        forearmR.position.y = -0.2;
+        forearmRGroup.add(forearmR);
+
+        const handRGeo = new THREE.SphereGeometry(0.08, 8, 8);
+        const handR = new THREE.Mesh(handRGeo, outfitMat);
+        handR.position.y = -0.45;
+        forearmRGroup.add(handR);
+
+        // 7. LEFT LEG HIERARCHY
+        const leftLegGroup = new THREE.Group();
+        leftLegGroup.position.set(-0.25, 0, 0);
+        character.add(leftLegGroup);
+
+        const thighLGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 8);
+        const thighL = new THREE.Mesh(thighLGeo, skinMat);
+        thighL.position.y = -0.4;
+        leftLegGroup.add(thighL);
+
+        const kneeLGeo = new THREE.BoxGeometry(0.14, 0.14, 0.14);
+        const kneeL = new THREE.Mesh(kneeLGeo, glowMat);
+        kneeL.position.set(0, -0.8, 0.05);
+        kneeL.rotation.z = Math.PI / 4;
+        leftLegGroup.add(kneeL);
+
+        const shinLGeo = new THREE.CylinderGeometry(0.18, 0.14, 0.7, 8);
+        const shinL = new THREE.Mesh(shinLGeo, outfitMat);
+        shinL.position.y = -1.15;
+        leftLegGroup.add(shinL);
+
+        const footLGeo = new THREE.ConeGeometry(0.14, 0.35, 4);
+        const footL = new THREE.Mesh(footLGeo, hatMat);
+        footL.position.set(0, -1.45, 0.1);
+        footL.rotation.x = Math.PI / 2.2;
+        leftLegGroup.add(footL);
+
+        // 8. RIGHT LEG HIERARCHY
+        const rightLegGroup = new THREE.Group();
+        rightLegGroup.position.set(0.25, 0, 0);
+        character.add(rightLegGroup);
+
+        const thighRGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 8);
+        const thighR = new THREE.Mesh(thighRGeo, skinMat);
+        thighR.position.y = -0.4;
+        rightLegGroup.add(thighR);
+
+        const kneeR = kneeL.clone();
+        rightLegGroup.add(kneeR);
+
+        const shinR = shinL.clone();
+        rightLegGroup.add(shinR);
+
+        const footR = footL.clone();
+        rightLegGroup.add(footR);
+
+        // Set state function exposed to Python
         window.setAvatarState = function(state) {
             if (STATES[state]) {
                 targetState = state;
@@ -248,13 +344,7 @@
             }
         };
 
-        // Blinking system
-        let blinkTimer = 0;
-        let isBlinking = false;
-        let blinkDuration = 0.12; // seconds
-        let blinkElapsed = 0;
-
-        // Animation
+        // Animation calculations
         const clock = new THREE.Clock();
 
         function animate() {
@@ -263,120 +353,136 @@
             const delta = clock.getDelta();
             const time = clock.getElapsedTime();
 
-            // Smooth State Transitions
+            // Smoothly Lerp Colors
             if (transitionProgress < 1.0) {
-                transitionProgress += delta * 2.0;
+                transitionProgress += delta * 2.5;
                 if (transitionProgress > 1.0) transitionProgress = 1.0;
 
                 const c1 = STATES[currentState].color;
                 const c2 = STATES[targetState].color;
-                const color = new THREE.Color(c1).lerp(new THREE.Color(c2), transitionProgress);
-
-                activeWireMat.color.copy(color);
-                solidGlowMat.color.copy(color);
-                particleMat.color.copy(color);
+                const blended = new THREE.Color(c1).lerp(new THREE.Color(c2), transitionProgress);
+                glowMat.color.copy(blended);
 
                 if (transitionProgress === 1.0) {
                     currentState = targetState;
                 }
             }
 
-            const stateConfig = STATES[currentState];
+            const speed = STATES[currentState].speed;
+            const pose = STATES[currentState].pose;
 
-            // 1. Idle Floating & Tilting (Breathing animation)
-            let floatOffset = Math.sin(time * 2.0 * stateConfig.speed) * 0.06;
-            characterGroup.position.y = floatOffset;
-            
-            // Random cute head tilts
-            characterGroup.rotation.y = Math.sin(time * 0.8) * 0.08;
-            characterGroup.rotation.z = Math.cos(time * 0.5) * 0.04;
-            characterGroup.rotation.x = Math.sin(time * 0.4) * 0.03;
+            // Reset rot/pos defaults and apply state-based gestures
+            if (pose === 'idle') {
+                // Breathing bobs
+                const breathing = Math.sin(time * 1.5) * 0.03;
+                character.position.y = -0.5 + breathing;
+                headGroup.position.y = 1.45 + breathing * 0.3;
+                
+                // Head sways
+                headGroup.rotation.y = Math.sin(time * 0.6) * 0.04;
+                headGroup.rotation.x = Math.cos(time * 0.4) * 0.03;
+                headGroup.rotation.z = Math.sin(time * 0.5) * 0.02;
 
-            // 2. Blinking Animation
-            blinkTimer += delta;
-            if (!isBlinking && blinkTimer > 3.0 + Math.random() * 4.0) {
-                isBlinking = true;
-                blinkElapsed = 0;
-            }
+                // Arm sways
+                leftArmGroup.rotation.z = Math.sin(time * 1.5) * 0.05 + 0.1;
+                leftArmGroup.rotation.x = Math.cos(time * 0.8) * 0.04;
+                forearmLGroup.rotation.x = 0.1;
 
-            if (isBlinking) {
-                blinkElapsed += delta;
-                let scaleY = 1.0;
-                if (blinkElapsed < blinkDuration / 2) {
-                    // Close eye
-                    scaleY = 1.0 - (blinkElapsed / (blinkDuration / 2));
-                } else if (blinkElapsed < blinkDuration) {
-                    // Open eye
-                    scaleY = (blinkElapsed - (blinkDuration / 2)) / (blinkDuration / 2);
-                } else {
-                    isBlinking = false;
-                    blinkTimer = 0;
-                    scaleY = 1.0;
-                }
-                leftEye.scale.y = scaleY;
-                rightEye.scale.y = scaleY;
-            }
+                rightArmGroup.rotation.z = -Math.sin(time * 1.5) * 0.05 - 0.1;
+                rightArmGroup.rotation.x = Math.cos(time * 0.8) * 0.04;
+                forearmRGroup.rotation.x = 0.1;
 
-            // 3. Speaking Lip-Sync
-            if (currentState === 'speaking') {
-                // Rhythmic scaling of mouth
-                const speakPulse = 0.2 + Math.abs(Math.sin(time * 15.0)) * 0.8 * (0.5 + Math.cos(time * 6.0) * 0.5);
-                mouth.scale.set(1.0 + speakPulse * 0.3, 1.0 + speakPulse * 1.5, 1.0);
-            } else {
+                // Legs default
+                leftLegGroup.rotation.x = 0;
+                rightLegGroup.rotation.x = 0;
                 mouth.scale.set(1.0, 1.0, 1.0);
+
+            } else if (pose === 'listening') {
+                // Attentive weight shift
+                character.position.y = -0.53;
+                
+                // Tilt head to hand
+                headGroup.rotation.z = 0.14;
+                headGroup.rotation.y = 0.18;
+                headGroup.rotation.x = 0.05;
+
+                // Raise left arm to ear
+                leftArmGroup.rotation.z = -1.1;
+                leftArmGroup.rotation.x = -0.5;
+                forearmLGroup.rotation.x = 1.3;
+
+                // Right arm sways back
+                rightArmGroup.rotation.z = -0.05;
+                rightArmGroup.rotation.x = 0.15;
+                forearmRGroup.rotation.x = 0.1;
+
+                leftLegGroup.rotation.x = 0.02;
+                rightLegGroup.rotation.x = -0.02;
+                mouth.scale.set(1.0, 1.0, 1.0);
+
+            } else if (pose === 'thinking') {
+                // Cross arms, tap foot
+                character.position.y = -0.5;
+                
+                // Tilt head up
+                headGroup.rotation.x = -0.12;
+                headGroup.rotation.y = -0.15;
+                headGroup.rotation.z = -0.05;
+
+                // Left arm crossed
+                leftArmGroup.rotation.z = -0.8;
+                leftArmGroup.rotation.x = -0.8;
+                forearmLGroup.rotation.x = 1.2;
+
+                // Right hand to chin
+                rightArmGroup.rotation.z = 0.4;
+                rightArmGroup.rotation.x = -1.2;
+                forearmRGroup.rotation.x = 1.4;
+
+                // Tapping foot
+                const tap = Math.sin(time * 8.0) * 0.06;
+                rightLegGroup.rotation.x = Math.max(0, tap);
+                leftLegGroup.rotation.x = 0;
+                mouth.scale.set(1.0, 1.0, 1.0);
+
+            } else if (pose === 'speaking') {
+                // Dynamic gestures while talking
+                const bob = Math.sin(time * 3.0) * 0.02;
+                character.position.y = -0.5 + bob;
+                
+                // Head nods
+                headGroup.rotation.x = 0.06 + Math.abs(Math.sin(time * 8.0)) * 0.08;
+                headGroup.rotation.y = Math.sin(time * 1.2) * 0.1;
+                headGroup.rotation.z = Math.sin(time * 0.6) * 0.03;
+
+                // Alternate hand waves
+                leftArmGroup.rotation.z = -0.4 + Math.sin(time * 6.0) * 0.25;
+                leftArmGroup.rotation.x = -0.3 + Math.cos(time * 5.0) * 0.2;
+                forearmLGroup.rotation.x = 0.5 + Math.sin(time * 8.0) * 0.3;
+
+                rightArmGroup.rotation.z = 0.4 - Math.cos(time * 5.5) * 0.25;
+                rightArmGroup.rotation.x = -0.3 + Math.sin(time * 6.5) * 0.2;
+                forearmRGroup.rotation.x = 0.5 + Math.cos(time * 7.5) * 0.3;
+
+                // Mouth opens
+                const mouthOpen = 0.2 + Math.abs(Math.sin(time * 14.0)) * 1.8 * (0.6 + Math.cos(time * 5.0) * 0.4);
+                mouth.scale.set(1.0 + mouthOpen * 0.2, 1.0 + mouthOpen * 2.0, 1.0);
+
+                leftLegGroup.rotation.x = 0;
+                rightLegGroup.rotation.x = 0;
             }
 
-            // 4. Floating collar animation
-            collar.position.y = -1.1 + floatOffset * 0.5;
-            collar.rotation.z += 0.005;
-
-            // Rotate visor & rings
-            visor.rotation.y = -time * 0.2 * stateConfig.speed;
-            orbit.rotation.z -= 0.01;
-
-            // Listening/Thinking animations
-            if (currentState === 'listening') {
-                // Glow rings pulse Cyan
-                const cyanPulse = 1.0 + Math.sin(time * 10.0) * 0.1;
-                phoneRingL.scale.set(cyanPulse, cyanPulse, cyanPulse);
-                phoneRingR.scale.set(cyanPulse, cyanPulse, cyanPulse);
-            } else if (currentState === 'thinking') {
-                // Tilt and rotate head faster
-                characterGroup.rotation.y = time * 2.0;
-                // Visor spins
-                visor.rotation.y = -time * 1.5;
-            } else {
-                phoneRingL.scale.set(1, 1, 1);
-                phoneRingR.scale.set(1, 1, 1);
-            }
-
-            // Swirling particles
-            const positionsAttr = particleGeo.attributes.position;
-            for (let i = 0; i < pCount; i++) {
-                const orig = origPositions[i];
-                orig.theta += 0.01 * stateConfig.speed;
-                orig.phi += 0.002 * Math.sin(time + i);
-
-                let radius = orig.dist;
-                if (currentState === 'thinking') {
-                    radius = orig.dist - 0.2 + Math.sin(time * 8.0 + i) * 0.08;
-                }
-
-                const x = radius * Math.sin(orig.phi) * Math.cos(orig.theta);
-                const y = radius * Math.sin(orig.phi) * Math.sin(orig.theta);
-                const z = radius * Math.cos(orig.phi);
-
-                positionsAttr.setXYZ(i, x, y, z);
-            }
-            positionsAttr.needsUpdate = true;
+            // Slowly rotate charms on horn ends
+            charmL.position.y = 0.2 + Math.sin(time * 4.0) * 0.02;
+            charmR.position.y = 0.2 + Math.sin(time * 4.0 + Math.PI) * 0.02;
 
             renderer.render(scene, camera);
         }
 
-        // Initialize state
+        // Initialize State
         window.setAvatarState('idle');
         
-        // Start Loop
+        // Start Render
         animate();
     </script>
 </body>
