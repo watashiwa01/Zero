@@ -14,7 +14,7 @@ class AvatarWindow:
         html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "avatar.html")
         
         # Dimensions for the desktop hologram widget
-        width, height = 300, 300
+        width, height = 320, 420
         x, y = 100, 100
         
         try:
