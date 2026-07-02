@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Zero 3D Hologram</title>
+    <title>Zero 3D Hologram Assistant</title>
     <style>
         body, html {
             margin: 0;
@@ -13,7 +13,7 @@
             background-color: rgba(0, 0, 0, 0);
             user-select: none;
             -webkit-user-select: none;
-            -webkit-app-region: drag; /* Allows dragging the window by clicking the avatar */
+            -webkit-app-region: drag; /* Drag window by clicking anywhere */
         }
         #canvas-container {
             width: 100%;
@@ -36,32 +36,32 @@
         // State configurations
         const STATES = {
             idle: {
-                color: 0x4d4dff,      // Deep Blue/Purple
+                color: 0x4d4dff,       // Deep Blue
                 glowColor: 0x9933ff,
                 speed: 1.0,
                 pulseRate: 0.015,
-                ringSpeed: 0.01
+                mouthMovement: 0.0
             },
             listening: {
-                color: 0x00ffff,      // Bright Cyan
+                color: 0x00ffff,       // Bright Cyan
                 glowColor: 0x0088ff,
-                speed: 3.5,
-                pulseRate: 0.12,
-                ringSpeed: 0.05
+                speed: 2.0,
+                pulseRate: 0.05,
+                mouthMovement: 0.0
             },
             thinking: {
-                color: 0xff00ff,      // Hot Magenta/Pink
+                color: 0xff00ff,       // Magenta/Pink
                 glowColor: 0xff0055,
-                speed: 5.0,
+                speed: 4.0,
                 pulseRate: 0.08,
-                ringSpeed: 0.08
+                mouthMovement: 0.0
             },
             speaking: {
-                color: 0x00ffaa,      // Teal/Mint Green
+                color: 0x00ffaa,       // Teal/Mint Green
                 glowColor: 0x00aa55,
-                speed: 2.5,
+                speed: 1.5,
                 pulseRate: 0.06,
-                ringSpeed: 0.03
+                mouthMovement: 1.0 // Activates mouth lip-sync
             }
         };
 
@@ -69,95 +69,178 @@
         let targetState = 'idle';
         let transitionProgress = 1.0;
 
-        // Setup Three.js Scene
+        // Setup Three.js
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         
-        // Transparent Renderer
         const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         container.appendChild(renderer.domElement);
 
-        // Camera
-        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 8;
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 7;
+        camera.position.y = 0.2;
 
-        // Core Objects Group
-        const hologramGroup = new THREE.Group();
-        scene.add(hologramGroup);
+        // Cyber-Assistant Group
+        const characterGroup = new THREE.Group();
+        scene.add(characterGroup);
 
-        // 1. Create Core Sphere (Hologram Core)
-        const coreGeo = new THREE.SphereGeometry(1.2, 32, 32);
-        // Custom Wireframe Material with glowing properties
-        const coreMat = new THREE.MeshBasicMaterial({
+        // Materials setup
+        const faceMat = new THREE.MeshBasicMaterial({
+            color: 0xddddff,
+            transparent: true,
+            opacity: 0.5,
+            wireframe: false
+        });
+
+        const activeWireMat = new THREE.MeshBasicMaterial({
             color: STATES.idle.color,
             wireframe: true,
             transparent: true,
             opacity: 0.8
         });
-        const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-        hologramGroup.add(coreMesh);
 
-        // 2. Create Outer Orbiting Rings
-        const ringGeo1 = new THREE.TorusGeometry(1.8, 0.04, 8, 64);
-        const ringMat1 = new THREE.MeshBasicMaterial({ color: 0x4d4dff, transparent: true, opacity: 0.6 });
-        const ring1 = new THREE.Mesh(ringGeo1, ringMat1);
-        ring1.rotation.x = Math.PI / 3;
-        hologramGroup.add(ring1);
+        const solidGlowMat = new THREE.MeshBasicMaterial({
+            color: STATES.idle.color,
+            transparent: true,
+            opacity: 0.9
+        });
 
-        const ringGeo2 = new THREE.TorusGeometry(2.1, 0.03, 8, 64);
-        const ringMat2 = new THREE.MeshBasicMaterial({ color: 0x9933ff, transparent: true, opacity: 0.4 });
-        const ring2 = new THREE.Mesh(ringGeo2, ringMat2);
-        ring2.rotation.y = Math.PI / 4;
-        hologramGroup.add(ring2);
+        // 1. Head (Stylized Cyber-Sphere)
+        const headGeo = new THREE.SphereGeometry(1.0, 16, 16);
+        const head = new THREE.Mesh(headGeo, faceMat);
+        characterGroup.add(head);
 
-        // 3. Create Swirling Particles (Brain Cells / Data points)
+        // Head Outer Shell Wireframe
+        const headWireGeo = new THREE.SphereGeometry(1.02, 16, 16);
+        const headWire = new THREE.Mesh(headWireGeo, activeWireMat);
+        characterGroup.add(headWire);
+
+        // 2. Glowing Eyes (2 digital circles)
+        const eyeGeo = new THREE.CircleGeometry(0.12, 16);
+        const leftEye = new THREE.Mesh(eyeGeo, solidGlowMat);
+        leftEye.position.set(-0.35, 0.15, 0.88);
+        leftEye.rotation.y = Math.PI / 12;
+        characterGroup.add(leftEye);
+
+        const rightEye = leftEye.clone();
+        rightEye.position.x = 0.35;
+        rightEye.rotation.y = -Math.PI / 12;
+        characterGroup.add(rightEye);
+
+        // 3. Cyber Visor (futuristic wrap-around plate)
+        const visorGeo = new THREE.CylinderGeometry(1.05, 1.05, 0.35, 32, 1, true, -Math.PI/3, Math.PI * 2/3);
+        const visor = new THREE.Mesh(visorGeo, activeWireMat);
+        visor.position.y = 0.15;
+        visor.rotation.x = Math.PI / 24;
+        characterGroup.add(visor);
+
+        // 4. Digital Mouth (Adjustable capsule shape)
+        const mouthGeo = new THREE.RingGeometry(0.02, 0.08, 16);
+        const mouth = new THREE.Mesh(mouthGeo, solidGlowMat);
+        mouth.position.set(0, -0.3, 0.92);
+        characterGroup.add(mouth);
+
+        // 5. Cyber Hair / Antenna Strands
+        const hairGroup = new THREE.Group();
+        characterGroup.add(hairGroup);
+        
+        // Hair left strand
+        const strandGeo = new THREE.ConeGeometry(0.08, 1.2, 4);
+        const strandL = new THREE.Mesh(strandGeo, activeWireMat);
+        strandL.position.set(-0.9, -0.2, 0.3);
+        strandL.rotation.z = -Math.PI / 6;
+        hairGroup.add(strandL);
+
+        // Hair right strand
+        const strandR = strandL.clone();
+        strandR.position.x = 0.9;
+        strandR.rotation.z = Math.PI / 6;
+        hairGroup.add(strandR);
+
+        // Hair top cowlick/antenna
+        const antennaGeo = new THREE.ConeGeometry(0.05, 0.6, 4);
+        const antenna = new THREE.Mesh(antennaGeo, activeWireMat);
+        antenna.position.set(0, 1.2, 0);
+        antenna.rotation.x = -Math.PI / 12;
+        hairGroup.add(antenna);
+
+        // 6. Cyber Headphones (Torus/Cylinder caps on sides)
+        const phoneGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.15, 16);
+        const phoneL = new THREE.Mesh(phoneGeo, activeWireMat);
+        phoneL.position.set(-1.0, 0.1, 0);
+        phoneL.rotation.z = Math.PI / 2;
+        characterGroup.add(phoneL);
+
+        const phoneR = phoneL.clone();
+        phoneR.position.x = 1.0;
+        characterGroup.add(phoneR);
+
+        // Glowing headphone ring details
+        const phoneRingGeo = new THREE.TorusGeometry(0.28, 0.03, 8, 32);
+        const phoneRingL = new THREE.Mesh(phoneRingGeo, solidGlowMat);
+        phoneRingL.position.set(-1.08, 0.1, 0);
+        phoneRingL.rotation.y = Math.PI / 2;
+        characterGroup.add(phoneRingL);
+
+        const phoneRingR = phoneRingL.clone();
+        phoneRingR.position.x = 1.08;
+        characterGroup.add(phoneRingR);
+
+        // 7. Holographic floating collar
+        const collarGeo = new THREE.TorusGeometry(1.2, 0.05, 8, 32);
+        const collar = new THREE.Mesh(collarGeo, activeWireMat);
+        collar.position.y = -1.2;
+        collar.rotation.x = Math.PI / 2;
+        characterGroup.add(collar);
+
+        // Orbit Ring
+        const orbitGeo = new THREE.TorusGeometry(1.5, 0.02, 4, 64);
+        const orbit = new THREE.Mesh(orbitGeo, activeWireMat);
+        orbit.position.y = 0;
+        orbit.rotation.x = Math.PI / 3;
+        characterGroup.add(orbit);
+
+        // Floating particles around head
         const particleGeo = new THREE.BufferGeometry();
-        const particleCount = 200;
-        const positions = new Float32Array(particleCount * 3);
-        const originalPositions = [];
+        const pCount = 80;
+        const positions = new Float32Array(pCount * 3);
+        const origPositions = [];
 
-        for (let i = 0; i < particleCount; i++) {
-            // Distribute particles in a shell around the core
-            const u = Math.random();
-            const v = Math.random();
-            const theta = u * 2.0 * Math.PI;
-            const phi = Math.acos(2.0 * v - 1.0);
-            
-            // Radii between 2.2 and 2.8
-            const r = 2.2 + Math.random() * 0.6;
-            
-            const x = r * Math.sin(phi) * Math.cos(theta);
-            const y = r * Math.sin(phi) * Math.sin(theta);
-            const z = r * Math.cos(phi);
-            
+        for (let i = 0; i < pCount; i++) {
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            const dist = 1.4 + Math.random() * 0.5;
+
+            const x = dist * Math.sin(phi) * Math.cos(theta);
+            const y = dist * Math.sin(phi) * Math.sin(theta);
+            const z = dist * Math.cos(phi);
+
             positions[i * 3] = x;
             positions[i * 3 + 1] = y;
             positions[i * 3 + 2] = z;
-            
-            originalPositions.push({ x, y, z, r, theta, phi });
+            origPositions.push({ x, y, z, dist, theta, phi });
         }
 
         particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         const particleMat = new THREE.PointsMaterial({
-            size: 0.08,
-            color: 0x9933ff,
+            size: 0.05,
+            color: STATES.idle.color,
             transparent: true,
-            opacity: 0.7,
-            sizeAttenuation: true
+            opacity: 0.7
         });
         const particles = new THREE.Points(particleGeo, particleMat);
-        hologramGroup.add(particles);
+        characterGroup.add(particles);
 
-        // Handle Window Resizing
+        // Handle Resizing
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Expose function for Python webview calls
+        // Set state API for python
         window.setAvatarState = function(state) {
             if (STATES[state]) {
                 targetState = state;
@@ -165,82 +248,124 @@
             }
         };
 
-        // Animation Loop
-        let clock = new THREE.Clock();
-        
+        // Blinking system
+        let blinkTimer = 0;
+        let isBlinking = false;
+        let blinkDuration = 0.12; // seconds
+        let blinkElapsed = 0;
+
+        // Animation
+        const clock = new THREE.Clock();
+
         function animate() {
             requestAnimationFrame(animate);
-            
+
             const delta = clock.getDelta();
             const time = clock.getElapsedTime();
 
-            // Smooth State Transitions (Lerp Colors & Values)
+            // Smooth State Transitions
             if (transitionProgress < 1.0) {
-                transitionProgress += delta * 2.0; // Transition over 0.5s
+                transitionProgress += delta * 2.0;
                 if (transitionProgress > 1.0) transitionProgress = 1.0;
-                
+
                 const c1 = STATES[currentState].color;
                 const c2 = STATES[targetState].color;
-                
-                // Color Lerp
                 const color = new THREE.Color(c1).lerp(new THREE.Color(c2), transitionProgress);
-                coreMat.color.copy(color);
-                ringMat1.color.copy(color);
+
+                activeWireMat.color.copy(color);
+                solidGlowMat.color.copy(color);
                 particleMat.color.copy(color);
-                
+
                 if (transitionProgress === 1.0) {
                     currentState = targetState;
                 }
             }
 
             const stateConfig = STATES[currentState];
+
+            // 1. Idle Floating & Tilting (Breathing animation)
+            let floatOffset = Math.sin(time * 2.0 * stateConfig.speed) * 0.06;
+            characterGroup.position.y = floatOffset;
             
-            // Dynamic Pulsing (Scale and Vertex distortion simulation)
-            let pulseScale = 1.0;
-            if (currentState === 'listening') {
-                // Soundwave-like high frequency vibration
-                pulseScale = 1.0 + Math.sin(time * 30.0) * 0.12 * Math.cos(time * 8.0);
-            } else if (currentState === 'speaking') {
-                // Rhythmic speaking pulses
-                pulseScale = 1.0 + Math.abs(Math.sin(time * 10.0)) * 0.25;
-            } else if (currentState === 'thinking') {
-                // Intense vibrating loading pulse
-                pulseScale = 1.0 + Math.sin(time * 20.0) * 0.08;
-            } else {
-                // Idle slow breathing
-                pulseScale = 1.0 + Math.sin(time * 2.0) * 0.06;
+            // Random cute head tilts
+            characterGroup.rotation.y = Math.sin(time * 0.8) * 0.08;
+            characterGroup.rotation.z = Math.cos(time * 0.5) * 0.04;
+            characterGroup.rotation.x = Math.sin(time * 0.4) * 0.03;
+
+            // 2. Blinking Animation
+            blinkTimer += delta;
+            if (!isBlinking && blinkTimer > 3.0 + Math.random() * 4.0) {
+                isBlinking = true;
+                blinkElapsed = 0;
             }
-            coreMesh.scale.set(pulseScale, pulseScale, pulseScale);
 
-            // Orbit Rotation
-            hologramGroup.rotation.y += stateConfig.ringSpeed;
-            hologramGroup.rotation.x += stateConfig.ringSpeed * 0.5;
-            
-            ring1.rotation.z += stateConfig.ringSpeed * 1.5;
-            ring2.rotation.z -= stateConfig.ringSpeed * 1.8;
-
-            // Animate Particles (Swirl effect around core)
-            const positionsAttr = particleGeo.attributes.position;
-            for (let i = 0; i < particleCount; i++) {
-                const orig = originalPositions[i];
-                
-                // Slowly change theta/phi for orbit motion
-                orig.theta += stateConfig.ringSpeed * 0.2;
-                
-                // Speeds adjust on state
-                let currentRadius = orig.r;
-                if (currentState === 'thinking') {
-                    // Particles pull in closer during thinking
-                    currentRadius = orig.r - 0.4 + Math.sin(time * 5.0 + i) * 0.1;
-                } else if (currentState === 'listening') {
-                    // Particles vibrate outward
-                    currentRadius = orig.r + Math.sin(time * 15.0 + i) * 0.15;
+            if (isBlinking) {
+                blinkElapsed += delta;
+                let scaleY = 1.0;
+                if (blinkElapsed < blinkDuration / 2) {
+                    // Close eye
+                    scaleY = 1.0 - (blinkElapsed / (blinkDuration / 2));
+                } else if (blinkElapsed < blinkDuration) {
+                    // Open eye
+                    scaleY = (blinkElapsed - (blinkDuration / 2)) / (blinkDuration / 2);
+                } else {
+                    isBlinking = false;
+                    blinkTimer = 0;
+                    scaleY = 1.0;
                 }
-                
-                const x = currentRadius * Math.sin(orig.phi) * Math.cos(orig.theta);
-                const y = currentRadius * Math.sin(orig.phi) * Math.sin(orig.theta);
-                const z = currentRadius * Math.cos(orig.phi);
-                
+                leftEye.scale.y = scaleY;
+                rightEye.scale.y = scaleY;
+            }
+
+            // 3. Speaking Lip-Sync
+            if (currentState === 'speaking') {
+                // Rhythmic scaling of mouth
+                const speakPulse = 0.2 + Math.abs(Math.sin(time * 15.0)) * 0.8 * (0.5 + Math.cos(time * 6.0) * 0.5);
+                mouth.scale.set(1.0 + speakPulse * 0.3, 1.0 + speakPulse * 1.5, 1.0);
+            } else {
+                mouth.scale.set(1.0, 1.0, 1.0);
+            }
+
+            // 4. Floating collar animation
+            collar.position.y = -1.1 + floatOffset * 0.5;
+            collar.rotation.z += 0.005;
+
+            // Rotate visor & rings
+            visor.rotation.y = -time * 0.2 * stateConfig.speed;
+            orbit.rotation.z -= 0.01;
+
+            // Listening/Thinking animations
+            if (currentState === 'listening') {
+                // Glow rings pulse Cyan
+                const cyanPulse = 1.0 + Math.sin(time * 10.0) * 0.1;
+                phoneRingL.scale.set(cyanPulse, cyanPulse, cyanPulse);
+                phoneRingR.scale.set(cyanPulse, cyanPulse, cyanPulse);
+            } else if (currentState === 'thinking') {
+                // Tilt and rotate head faster
+                characterGroup.rotation.y = time * 2.0;
+                // Visor spins
+                visor.rotation.y = -time * 1.5;
+            } else {
+                phoneRingL.scale.set(1, 1, 1);
+                phoneRingR.scale.set(1, 1, 1);
+            }
+
+            // Swirling particles
+            const positionsAttr = particleGeo.attributes.position;
+            for (let i = 0; i < pCount; i++) {
+                const orig = origPositions[i];
+                orig.theta += 0.01 * stateConfig.speed;
+                orig.phi += 0.002 * Math.sin(time + i);
+
+                let radius = orig.dist;
+                if (currentState === 'thinking') {
+                    radius = orig.dist - 0.2 + Math.sin(time * 8.0 + i) * 0.08;
+                }
+
+                const x = radius * Math.sin(orig.phi) * Math.cos(orig.theta);
+                const y = radius * Math.sin(orig.phi) * Math.sin(orig.theta);
+                const z = radius * Math.cos(orig.phi);
+
                 positionsAttr.setXYZ(i, x, y, z);
             }
             positionsAttr.needsUpdate = true;
@@ -248,7 +373,10 @@
             renderer.render(scene, camera);
         }
 
-        // Run
+        // Initialize state
+        window.setAvatarState('idle');
+        
+        // Start Loop
         animate();
     </script>
 </body>
