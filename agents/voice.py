@@ -21,6 +21,12 @@ class VoiceAgent:
         print(f"Zero: {text}")
         sys.stdout.flush()
         
+        try:
+            from core.system.avatar_window import set_avatar_state
+            set_avatar_state("speaking")
+        except ImportError:
+            pass
+            
         if pyttsx3 is not None:
             try:
                 # Initialize engine fresh each time to bind to the active playback device
@@ -37,6 +43,12 @@ class VoiceAgent:
                 engine.runAndWait()
             except Exception as e:
                 print(f"[Warning] Voice playback error: {e}", file=sys.stderr)
+
+        try:
+            from core.system.avatar_window import set_avatar_state
+            set_avatar_state("idle")
+        except ImportError:
+            pass
 
     def listen_for_speech(self, timeout=5):
         if sr is None:
