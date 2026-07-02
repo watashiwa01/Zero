@@ -24,7 +24,6 @@ class BrainAgent:
     def process_input(self, user_input):
         user_input_clean = user_input.strip()
         
-        # 1. Attempt local Ollama generation
         try:
             payload = {
                 "model": self.model_name,
@@ -44,15 +43,12 @@ class BrainAgent:
                 if parsed:
                     return parsed
         except Exception:
-            # Fall through to rule-based fallback if Ollama is offline or requests timeout
             pass
 
-        # 2. Rule-Based Fallback Engine (Runs locally, fast, 100% reliable)
         return self._rule_based_fallback(user_input_clean)
 
     def _clean_and_parse_json(self, json_str):
         try:
-            # Remove markdown code block surrounds if present
             cleaned = re.sub(r"^```(json)?\s*", "", json_str, flags=re.IGNORECASE)
             cleaned = re.sub(r"\s*```$", "", cleaned)
             return json.loads(cleaned)
@@ -62,7 +58,6 @@ class BrainAgent:
     def _rule_based_fallback(self, text):
         text_lower = text.lower()
         
-        # Open Application rule
         open_match = re.search(r"\b(open|launch|start)\s+([a-z0-9\s\._\-]+)", text_lower)
         if open_match:
             app_name = open_match.group(2).strip()
@@ -72,7 +67,6 @@ class BrainAgent:
                 "response": f"Opening {app_name}."
             }
             
-        # Close Application rule
         close_match = re.search(r"\b(close|exit|stop|terminate)\s+([a-z0-9\s\._\-]+)", text_lower)
         if close_match:
             app_name = close_match.group(2).strip()
@@ -82,8 +76,6 @@ class BrainAgent:
                 "response": f"Closing {app_name}."
             }
 
-        # Store Memory rules
-        # "remember that <content>"
         if text_lower.startswith("remember that ") or text_lower.startswith("remember "):
             content = text[9:] if text_lower.startswith("remember ") else text[14:]
             if text_lower.startswith("remember that "):
@@ -94,10 +86,7 @@ class BrainAgent:
                 "response": f"Stored memory: \"{content.strip()}\""
             }
 
-        # Recall Memory rules
-        # "what do i have...", "do you remember...", "recall..."
         if "what do i have" in text_lower or "recall" in text_lower or "remember" in text_lower or "memory" in text_lower:
-            # Extract possible query keywords
             query = ""
             if "next week" in text_lower:
                 query = "next week"
@@ -114,7 +103,6 @@ class BrainAgent:
                 "response": "Searching memory..."
             }
 
-        # Check Battery rule
         if "battery" in text_lower or "power" in text_lower:
             return {
                 "action": "check_battery",
@@ -122,7 +110,6 @@ class BrainAgent:
                 "response": "Checking battery status."
             }
 
-        # Check Wi-Fi / Internet rule
         if "wifi" in text_lower or "wi-fi" in text_lower or "internet" in text_lower or "connection" in text_lower:
             return {
                 "action": "check_wifi",
@@ -130,7 +117,6 @@ class BrainAgent:
                 "response": "Checking connection status."
             }
 
-        # Create Folder rule
         create_folder_match = re.search(r"\bcreate\s+(?:folder|directory)\s+([a-z0-9\s\._\-\\]+)", text_lower)
         if create_folder_match:
             folder_path = create_folder_match.group(1).strip()
@@ -140,7 +126,6 @@ class BrainAgent:
                 "response": f"Creating folder: {folder_path}."
             }
 
-        # Default chat fallback
         return {
             "action": "chat",
             "params": {},
