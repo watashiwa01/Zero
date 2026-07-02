@@ -61,7 +61,7 @@ class NetworkMonitor:
                 return f"Wi-Fi interface '{self.interface_name}' set to {admin_status} successfully."
             else:
                 # If command fails (most likely due to permission), prompt for privilege elevation
-                ps_cmd = f'Start-Process cmd -ArgumentList "/c {cmd}" -Verb RunAs'
+                ps_cmd = f"Start-Process cmd -ArgumentList '/c {cmd}' -Verb RunAs"
                 subprocess.run(["powershell", "-Command", ps_cmd], check=True)
                 return f"Requested Administrator privileges to turn Wi-Fi {state}. Please check the UAC pop-up."
         except Exception as e:
