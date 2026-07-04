@@ -1,7 +1,10 @@
+import os
 import sys
 import time
+import requests
+import tempfile
+import subprocess
 
-# Try importing dependencies, handle missing ones gracefully
 try:
     import pyttsx3
 except ImportError:
@@ -14,7 +17,65 @@ except ImportError:
 
 class VoiceAgent:
     def __init__(self):
-        pass
+        # Read API key if available
+        self.api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
+        # Default beautiful ElevenLabs Voice ID (Rachel)
+        self.voice_id = "21m00Tcm4TlvDq8ikWAM" 
+
+    def _play_mp3_native(self, file_path):
+        """Plays MP3 using native Windows Media Player COM object via PowerShell."""
+        abs_path = os.path.abspath(file_path)
+        cmd = [
+            "powershell",
+            "-Command",
+            f"$wmp = New-Object -ComObject WMPlayer.OCX; $wmp.URL = '{abs_path}'; while ($wmp.playState -ne 1) {{ Start-Sleep -Milliseconds 50 }}"
+        ]
+        subprocess.run(cmd)
+
+    def _speak_elevenlabs(self, text):
+        """Fetches voice from ElevenLabs API and plays natively."""
+        if not self.api_key:
+            return False
+            
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream"
+        headers = {
+            "Accept": "audio/mpeg",
+            "Content-Type": "application/json",
+            "xi-api-key": self.api_key
+        }
+        data = {
+            "text": text,
+            "model_id": "eleven_monolingual_v1",
+            "voice_settings": {
+                "stability": 0.75,
+                "similarity_boost": 0.75
+            }
+        }
+        
+        try:
+            response = requests.post(url, json=data, headers=headers, timeout=12)
+            if response.status_code == 200:
+                # Save MP3 audio to temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+                    f.write(response.content)
+                    temp_name = f.name
+                
+                try:
+                    self._play_mp3_native(temp_name)
+                finally:
+                    # Clean up temporary file
+                    if os.path.exists(temp_name):
+                        try:
+                            os.remove(temp_name)
+                        except Exception:
+                            pass
+                return True
+            else:
+                print(f"[Warning] ElevenLabs returned status code: {response.status_code}", file=sys.stderr)
+                return False
+        except Exception as e:
+            print(f"[Warning] ElevenLabs API error: {e}", file=sys.stderr)
+            return False
 
     def speak(self, text):
         # Always output text to standard console
@@ -27,22 +88,23 @@ class VoiceAgent:
         except ImportError:
             pass
             
-        if pyttsx3 is not None:
+        # Try ElevenLabs first
+        played = self._speak_elevenlabs(text)
+        
+        # Fall back to local SAPI5 Offline TTS
+        if not played and pyttsx3 is not None:
             try:
-                # Initialize engine fresh each time to bind to the active playback device
                 engine = pyttsx3.init()
                 voices = engine.getProperty('voices')
                 if voices:
                     engine.setProperty('voice', voices[0].id)
-                engine.setProperty('rate', 175) # Set speaking rate
+                engine.setProperty('rate', 175)
                 
-                # Short delay to allow Windows to release microphone audio resource/Bluetooth profile lock
                 time.sleep(0.3)
-                
                 engine.say(text)
                 engine.runAndWait()
             except Exception as e:
-                print(f"[Warning] Voice playback error: {e}", file=sys.stderr)
+                print(f"[Warning] Local offline TTS error: {e}", file=sys.stderr)
 
         try:
             from core.system.avatar_window import set_avatar_state
@@ -52,12 +114,9 @@ class VoiceAgent:
 
     def listen_for_speech(self, timeout=5):
         if sr is None:
-            # Fallback to console input if speech_recognition package is missing
             return input("You (keyboard): ").strip()
             
         recognizer = sr.Recognizer()
-        
-        # Test if microphone is accessible
         try:
             mic = sr.Microphone()
         except Exception as e:
@@ -68,14 +127,12 @@ class VoiceAgent:
             with mic as source:
                 print("\n[Listening... Speak now]")
                 sys.stdout.flush()
-                # Adjust for ambient noise
                 recognizer.adjust_for_ambient_noise(source, duration=0.8)
                 audio = recognizer.listen(source, timeout=timeout, phrase_time_limit=10)
                 
             print("[Processing audio...]")
             sys.stdout.flush()
             
-            # Use Google Speech Recognition (free, no API key required)
             text = recognizer.recognize_google(audio)
             print(f"You (voice): {text}")
             return text.strip()
@@ -90,7 +147,6 @@ class VoiceAgent:
             print(f"[STT Request Error: {e}]. Falling back to keyboard.")
             return input("You (keyboard): ").strip()
         except Exception as e:
-            # Fallback for generic errors (e.g. PyAudio missing)
             if "pyaudio" in str(e).lower() or "no default input device" in str(e).lower():
                 print("[Info] PyAudio not installed or no mic detected. Falling back to keyboard.")
             else:

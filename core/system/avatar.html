@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Zero Anime Visualizer</title>
+    <title>Zero Minecraft Voxel Visualizer</title>
     <style>
         body, html {
             margin: 0;
@@ -10,7 +10,7 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: rgba(0, 0, 0, 0); /* Force transparent web view */
+            background-color: rgba(0, 0, 0, 0); /* Transparent web view */
             user-select: none;
             -webkit-user-select: none;
             -webkit-app-region: drag;
@@ -24,6 +24,7 @@
         }
         canvas {
             display: block;
+            image-rendering: pixelated; /* Crisp pixel style */
         }
     </style>
 </head>
@@ -36,21 +37,23 @@
         const canvas = document.getElementById('avatarCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Color definitions
-        const SKIN_COLOR = '#ffeedd';       // Fair skin
-        const HAIR_COLOR = '#4a3225';       // Spiky brown hair
-        const HAT_BASE = '#ffffff';         // White hat
-        const HAT_GOLD = '#ffd700';         // Gold trim
-        const GEM_RED = '#d00000';          // Ruby red gem
-        const EYE_VIOLET = '#8a2be2';       // Violet eyes
-        const OUTFIT_COLOR = '#1f1d24';     // Dark outfit
-        const HAT_PURPLE = '#3d274c';       // Purple horns/accents
+        // Flat Minecraft colors
+        const SKIN_COLOR = '#e5a07c';       // Peach skin
+        const SKIN_SHADOW = '#c07e5e';      // Skin shadow
+        const HAIR_COLOR = '#3e2417';       // Flat brown hair
+        const HAT_BASE = '#ffffff';         // White blocks
+        const HAT_GOLD = '#dcb013';         // Gold blocks
+        const GEM_RED = '#b00000';          // Ruby block
+        const EYE_VIOLET = '#7828a0';       // Purple eyes
+        const EYE_PUPIL = '#111111';        // Black eye pixel
+        const OUTFIT_COLOR = '#1f1c24';     // Charcoal body
+        const HAT_PURPLE = '#3d254b';       // Dark purple horn blocks
 
         const STATES = {
-            idle: { color: '#39ff14', speed: 1.0, pose: 'idle' },      // Neon green
-            listening: { color: '#00ffff', speed: 2.2, pose: 'listening' }, // Cyan
-            thinking: { color: '#ff00ff', speed: 3.5, pose: 'thinking' },   // Magenta
-            speaking: { color: '#00ffaa', speed: 1.8, pose: 'speaking' }   // Teal
+            idle: { color: '#39ff14', speed: 1.0, pose: 'idle' },
+            listening: { color: '#00ffff', speed: 2.2, pose: 'listening' },
+            thinking: { color: '#ff00ff', speed: 3.5, pose: 'thinking' },
+            speaking: { color: '#00ffaa', speed: 1.8, pose: 'speaking' }
         };
 
         let currentState = 'idle';
@@ -58,7 +61,6 @@
         let transitionProgress = 1.0;
         let currentColor = STATES.idle.color;
 
-        // Handle Resizing
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
@@ -66,7 +68,6 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // Expose state update function to Python webview
         window.setAvatarState = function(state) {
             if (STATES[state]) {
                 targetState = state;
@@ -74,25 +75,31 @@
             }
         };
 
-        // Blinking variables
         let blinkTimer = 0;
         let isBlinking = false;
-        const blinkDuration = 10; // frames
+        const blinkDuration = 10;
         let blinkFrame = 0;
 
-        // Hex color interpolation helper
         function lerpColor(color1, color2, factor) {
             const c1 = parseInt(color1.substring(1), 16);
             const c2 = parseInt(color2.substring(1), 16);
-
             const r1 = (c1 >> 16) & 255, g1 = (c1 >> 8) & 255, b1 = c1 & 255;
             const r2 = (c2 >> 16) & 255, g2 = (c2 >> 8) & 255, b2 = c2 & 255;
-
             const r = Math.round(r1 + factor * (r2 - r1));
             const g = Math.round(g1 + factor * (g2 - g1));
             const b = Math.round(b1 + factor * (b2 - b1));
-
             return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+
+        // Helper to draw a pixelated/voxel block with bevel/borders
+        function drawBlock(x, y, w, h, fill, border = null) {
+            ctx.fillStyle = fill;
+            ctx.fillRect(x, y, w, h);
+            if (border) {
+                ctx.strokeStyle = border;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, w, h);
+            }
         }
 
         let time = 0;
@@ -104,7 +111,6 @@
             const pose = STATES[currentState].pose;
             time += 0.03 * speed;
 
-            // Handle color transitions
             if (transitionProgress < 1.0) {
                 transitionProgress += 0.05;
                 if (transitionProgress > 1.0) transitionProgress = 1.0;
@@ -116,7 +122,6 @@
                 currentColor = STATES[currentState].color;
             }
 
-            // Blinking logic
             blinkTimer++;
             if (!isBlinking && blinkTimer > 180 + Math.random() * 200) {
                 isBlinking = true;
@@ -130,310 +135,144 @@
                 }
             }
 
-            // Base position offset (floating & breathing bobs)
             const cx = canvas.width / 2;
             const cy = canvas.height / 2 + 10;
-            const bob = Math.sin(time * 2) * 6;
+            const bob = Math.sin(time * 2) * 5;
             const headY = cy - 40 + bob;
 
-            // 1. Draw grid-floor effect in the background
-            ctx.strokeStyle = '#2d2d3a';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy + 120, 80, 20, 0, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Grid lines inside ellipse
-            for (let i = -3; i <= 3; i++) {
-                ctx.beginPath();
-                ctx.moveTo(cx + i * 20, cy + 100);
-                ctx.lineTo(cx + i * 25, cy + 140);
-                ctx.stroke();
-            }
-
-            // 2. Draw Torso & Collar
-            ctx.fillStyle = OUTFIT_COLOR;
-            ctx.beginPath();
-            ctx.moveTo(cx - 50, cy + 110);
-            ctx.quadraticCurveTo(cx - 45, cy + 30, cx - 25, cy + 30);
-            ctx.lineTo(cx + 25, cy + 30);
-            ctx.quadraticCurveTo(cx + 45, cy + 30, cx + 50, cy + 110);
-            ctx.closePath();
-            ctx.fill();
-
-            // Belt/Collar details
-            ctx.fillStyle = HAT_BASE;
-            ctx.beginPath();
-            ctx.moveTo(cx - 30, cy + 70);
-            ctx.lineTo(cx + 30, cy + 70);
-            ctx.lineTo(cx + 25, cy + 85);
-            ctx.lineTo(cx - 25, cy + 85);
-            ctx.closePath();
-            ctx.fill();
-
-            // Neck
-            ctx.fillStyle = SKIN_COLOR;
-            ctx.fillRect(cx - 16, headY + 15, 32, 35);
-
-            // 3. Draw Side/Back Hair (Spiky strands)
-            ctx.fillStyle = HAIR_COLOR;
-            
-            // Back hair spikes
-            ctx.beginPath();
-            ctx.moveTo(cx - 55, headY - 10);
-            ctx.lineTo(cx - 65, headY - 20);
-            ctx.lineTo(cx - 48, headY - 30);
-            ctx.lineTo(cx - 55, headY - 45);
-            ctx.lineTo(cx - 35, headY - 50);
-            ctx.lineTo(cx + 35, headY - 50);
-            ctx.lineTo(cx + 55, headY - 45);
-            ctx.lineTo(cx + 48, headY - 30);
-            ctx.lineTo(cx + 65, headY - 20);
-            ctx.lineTo(cx + 55, headY - 10);
-            ctx.closePath();
-            ctx.fill();
-
-            // Side hair framing cheeks
-            ctx.beginPath();
-            ctx.moveTo(cx - 40, headY - 10);
-            ctx.lineTo(cx - 48, headY + 30); // Left side strand
-            ctx.lineTo(cx - 36, headY + 10);
-            ctx.lineTo(cx - 34, headY + 45); // Left front long strand
-            ctx.lineTo(cx - 26, headY + 15);
-            ctx.lineTo(cx - 20, headY - 10);
-            ctx.closePath();
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.moveTo(cx + 40, headY - 10);
-            ctx.lineTo(cx + 48, headY + 30); // Right side strand
-            ctx.lineTo(cx + 36, headY + 10);
-            ctx.lineTo(cx + 34, headY + 45); // Right front long strand
-            ctx.lineTo(cx + 26, headY + 15);
-            ctx.lineTo(cx + 20, headY - 10);
-            ctx.closePath();
-            ctx.fill();
-
-            // 4. Draw Face Shape
-            ctx.fillStyle = SKIN_COLOR;
-            ctx.beginPath();
-            ctx.arc(cx, headY, 42, 0, Math.PI * 2);
-            ctx.fill();
-
-            // 5. Draw Anime Eyes (Violet + pupils + white glossy shine)
-            const leftEyeX = cx - 18;
-            const rightEyeX = cx + 18;
-            const eyeY = headY - 4;
-            const eyeH = 14;
-
-            if (isBlinking) {
-                // Closed eye lines
-                ctx.strokeStyle = '#4a1111';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(leftEyeX - 10, eyeY);
-                ctx.lineTo(leftEyeX + 10, eyeY);
-                ctx.moveTo(rightEyeX - 10, eyeY);
-                ctx.lineTo(rightEyeX + 10, eyeY);
-                ctx.stroke();
-            } else {
-                // Violet iris
-                ctx.fillStyle = EYE_VIOLET;
-                ctx.beginPath();
-                ctx.ellipse(leftEyeX, eyeY, 8, eyeH, 0, 0, Math.PI * 2);
-                ctx.ellipse(rightEyeX, eyeY, 8, eyeH, 0, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Black pupils
-                ctx.fillStyle = '#111111';
-                ctx.beginPath();
-                ctx.ellipse(leftEyeX, eyeY + 2, 4, 8, 0, 0, Math.PI * 2);
-                ctx.ellipse(rightEyeX, eyeY + 2, 4, 8, 0, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Glossy white highlight circles
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(leftEyeX + 3, eyeY - 4, 3, 0, Math.PI * 2);
-                ctx.arc(rightEyeX + 3, eyeY - 4, 3, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.beginPath();
-                ctx.arc(leftEyeX - 2, eyeY + 4, 1.5, 0, Math.PI * 2);
-                ctx.arc(rightEyeX - 2, eyeY + 4, 1.5, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            // Eyebrows
-            ctx.strokeStyle = HAIR_COLOR;
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            ctx.moveTo(leftEyeX - 10, eyeY - 18);
-            ctx.quadraticCurveTo(leftEyeX, eyeY - 21, leftEyeX + 8, eyeY - 17);
-            ctx.moveTo(rightEyeX + 10, eyeY - 18);
-            ctx.quadraticCurveTo(rightEyeX, eyeY - 21, rightEyeX - 8, eyeY - 17);
-            ctx.stroke();
-
-            // 6. Draw Bangs (Overlap forehead)
-            ctx.fillStyle = HAIR_COLOR;
-            const bangWidth = 10;
-            ctx.beginPath();
-            ctx.moveTo(cx - 45, headY - 20);
-            for (let i = 0; i < 7; i++) {
-                const ratio = i / 6; // 0 to 1
-                const bx = cx - 35 + ratio * 70;
-                const by = headY - 15 + Math.sin(time * 0.5 + i) * 2;
-                ctx.lineTo(bx - 4, by - 10);
-                ctx.lineTo(bx, by + 12 + Math.abs(ratio - 0.5) * 8); // middle bangs are slightly longer
-                ctx.lineTo(bx + 4, by - 10);
-            }
-            ctx.lineTo(cx + 45, headY - 20);
-            ctx.closePath();
-            ctx.fill();
-
-            // 7. Draw Hat (White Cap + Gold Border + Horns)
-            
-            // Horns (Large curved purple horn structures on the sides)
-            ctx.fillStyle = HAT_PURPLE;
-            ctx.beginPath();
-            // Left horn
-            ctx.moveTo(cx - 30, headY - 28);
-            ctx.quadraticCurveTo(cx - 80, headY - 45, cx - 95, headY - 10);
-            ctx.quadraticCurveTo(cx - 70, headY - 20, cx - 25, headY - 22);
-            // Right horn
-            ctx.moveTo(cx + 30, headY - 28);
-            ctx.quadraticCurveTo(cx + 80, headY - 45, cx + 95, headY - 10);
-            ctx.quadraticCurveTo(cx + 70, headY - 20, cx + 25, headY - 22);
-            ctx.closePath();
-            ctx.fill();
-
-            // Small bells dangling on horn ends
-            ctx.fillStyle = SKIN_COLOR;
-            ctx.beginPath();
-            ctx.arc(cx - 95, headY - 5 + Math.sin(time * 3.5) * 2, 5, 0, Math.PI * 2);
-            ctx.arc(cx + 95, headY - 5 + Math.sin(time * 3.5 + Math.PI) * 2, 5, 0, Math.PI * 2);
-            ctx.fill();
-
-            // White dome cap
-            ctx.fillStyle = HAT_BASE;
-            ctx.beginPath();
-            ctx.ellipse(cx, headY - 32, 38, 18, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Gold bottom border trim
-            ctx.strokeStyle = HAT_GOLD;
+            // 1. Draw blocky ground shadow/grid
+            ctx.strokeStyle = '#22222b';
             ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.ellipse(cx, headY - 28, 38, 14, 0, 0.1 * Math.PI, 0.9 * Math.PI);
+            ctx.rect(cx - 60, cy + 120, 120, 16);
             ctx.stroke();
 
-            // Raised center crown structure
-            ctx.fillStyle = HAT_BASE;
-            ctx.beginPath();
-            ctx.moveTo(cx - 20, headY - 30);
-            ctx.lineTo(cx - 20, headY - 48);
-            ctx.lineTo(cx, headY - 56);
-            ctx.lineTo(cx + 20, headY - 48);
-            ctx.lineTo(cx + 20, headY - 30);
-            ctx.closePath();
-            ctx.fill();
+            // 2. Draw Torso Block (Minecraft style)
+            drawBlock(cx - 40, cy + 30, 80, 80, OUTFIT_COLOR);
+            // Collar detail blocks
+            drawBlock(cx - 24, cy + 30, 48, 12, HAT_BASE);
+            drawBlock(cx - 8, cy + 30, 16, 12, SKIN_COLOR);
 
-            // Gold crown trim top
-            ctx.fillStyle = HAT_GOLD;
-            ctx.beginPath();
-            ctx.moveTo(cx - 20, headY - 48);
-            ctx.lineTo(cx, headY - 56);
-            ctx.lineTo(cx + 20, headY - 48);
-            ctx.lineTo(cx + 20, headY - 44);
-            ctx.lineTo(cx, headY - 52);
-            ctx.lineTo(cx - 20, headY - 44);
-            ctx.closePath();
-            ctx.fill();
+            // Left/Right shoulder blocks
+            drawBlock(cx - 50, cy + 30, 10, 20, currentColor);
+            drawBlock(cx + 40, cy + 30, 10, 20, currentColor);
 
-            // Diamond Gold Bezel
-            ctx.fillStyle = HAT_GOLD;
-            ctx.beginPath();
-            ctx.moveTo(cx, headY - 48);
-            ctx.lineTo(cx + 10, headY - 38);
-            ctx.lineTo(cx, headY - 28);
-            ctx.lineTo(cx - 10, headY - 38);
-            ctx.closePath();
-            ctx.fill();
+            // Neck Block
+            drawBlock(cx - 12, headY + 15, 24, 30, SKIN_COLOR);
 
-            // Ruby Red Gem (pulsing with glow)
-            ctx.fillStyle = GEM_RED;
-            ctx.beginPath();
-            ctx.arc(cx, headY - 38, 6, 0, Math.PI * 2);
-            ctx.fill();
+            // 3. Back Hair Blocks (Spiky steps)
+            drawBlock(cx - 48, headY - 15, 12, 35, HAIR_COLOR);
+            drawBlock(cx - 48, headY - 35, 12, 20, HAIR_COLOR);
+            drawBlock(cx + 36, headY - 15, 12, 35, HAIR_COLOR);
+            drawBlock(cx + 36, headY - 35, 12, 20, HAIR_COLOR);
 
-            // Ruby shine
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(cx + 2, headY - 40, 1.5, 0, Math.PI * 2);
-            ctx.fill();
+            // 4. Face Block (Large Minecraft cube)
+            drawBlock(cx - 36, headY - 25, 72, 60, SKIN_COLOR);
 
-            // 8. Draw Mouth (Speaking/Smiling animations)
-            ctx.strokeStyle = '#4a1111';
-            ctx.fillStyle = '#ffb3b3';
-            ctx.lineWidth = 2;
+            // 5. Square Pixelated Anime Eyes
+            const leftEyeX = cx - 22;
+            const rightEyeX = cx + 8;
+            const eyeY = headY - 5;
+            const eyeSize = 14;
 
-            if (pose === 'speaking') {
-                // Animate open mouth speaking
-                const speakAmplitude = 2 + Math.abs(Math.sin(time * 12)) * 8;
-                ctx.beginPath();
-                ctx.ellipse(cx, headY + 14, 6, speakAmplitude, 0, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
+            if (isBlinking) {
+                // Closed flat eye block
+                drawBlock(leftEyeX, eyeY + 6, eyeSize, 3, SKIN_SHADOW);
+                drawBlock(rightEyeX, eyeY + 6, eyeSize, 3, SKIN_SHADOW);
             } else {
-                // Slight curved smile
-                ctx.beginPath();
-                ctx.arc(cx, headY + 8, 8, 0, Math.PI);
-                ctx.stroke();
+                // Purple iris block
+                drawBlock(leftEyeX, eyeY, eyeSize, eyeSize, EYE_VIOLET);
+                drawBlock(rightEyeX, eyeY, eyeSize, eyeSize, EYE_VIOLET);
+                
+                // Black pupil pixel block
+                drawBlock(leftEyeX + 4, eyeY + 4, 8, 8, EYE_PUPIL);
+                drawBlock(rightEyeX + 2, eyeY + 4, 8, 8, EYE_PUPIL);
+
+                // Glossy white highlight pixel block
+                drawBlock(leftEyeX + 8, eyeY, 6, 6, '#ffffff');
+                drawBlock(rightEyeX + 6, eyeY, 6, 6, '#ffffff');
             }
 
-            // 9. Floating Status Rings / Particles (representing current state color)
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = 3;
-            ctx.shadowColor = currentColor;
-            ctx.shadowBlur = 8;
-            
-            // Halo above head
-            ctx.beginPath();
-            ctx.ellipse(cx, headY - 75, 45, 12, 0.1, 0, Math.PI * 2);
-            ctx.stroke();
-            
-            // Reset shadow blur
+            // Eyebrow pixel block
+            drawBlock(leftEyeX - 2, eyeY - 8, 18, 3, HAIR_COLOR);
+            drawBlock(rightEyeX - 2, eyeY - 8, 18, 3, HAIR_COLOR);
+
+            // Cheek blush pixels
+            drawBlock(leftEyeX - 4, eyeY + 16, 6, 4, '#ff9999');
+            drawBlock(rightEyeX + 12, eyeY + 16, 6, 4, '#ff9999');
+
+            // 6. Front Hair Bangs (Square pixel chunks overlap forehead)
+            drawBlock(cx - 38, headY - 25, 10, 16, HAIR_COLOR);
+            drawBlock(cx - 28, headY - 25, 12, 24, HAIR_COLOR);
+            drawBlock(cx - 16, headY - 25, 10, 12, HAIR_COLOR);
+            drawBlock(cx - 6, headY - 25, 12, 28, HAIR_COLOR);
+            drawBlock(cx + 6, headY - 25, 10, 16, HAIR_COLOR);
+            drawBlock(cx + 16, headY - 25, 12, 24, HAIR_COLOR);
+            drawBlock(cx + 28, headY - 25, 10, 12, HAIR_COLOR);
+
+            // Side locks
+            drawBlock(cx - 42, headY - 5, 8, 36, HAIR_COLOR);
+            drawBlock(cx + 34, headY - 5, 8, 36, HAIR_COLOR);
+
+            // 7. Minecraft Hat Structure
+            // Horn blocks (Curved voxel paths)
+            drawBlock(cx - 48, headY - 35, 12, 12, HAT_PURPLE);
+            drawBlock(cx - 64, headY - 47, 16, 12, HAT_PURPLE);
+            drawBlock(cx - 80, headY - 35, 16, 12, HAT_PURPLE);
+            drawBlock(cx - 88, headY - 23, 12, 16, HAT_PURPLE);
+            // Bell dangling at end
+            drawBlock(cx - 88, headY - 7 + Math.sin(time * 3.5) * 2, 8, 8, SKIN_COLOR);
+
+            drawBlock(cx + 36, headY - 35, 12, 12, HAT_PURPLE);
+            drawBlock(cx + 48, headY - 47, 16, 12, HAT_PURPLE);
+            drawBlock(cx + 64, headY - 35, 16, 12, HAT_PURPLE);
+            drawBlock(cx + 76, headY - 23, 12, 16, HAT_PURPLE);
+            // Bell dangling at end
+            drawBlock(cx + 80, headY - 7 + Math.sin(time * 3.5 + Math.PI) * 2, 8, 8, SKIN_COLOR);
+
+            // Main Cap block
+            drawBlock(cx - 36, headY - 37, 72, 12, HAT_BASE);
+            drawBlock(cx - 36, headY - 29, 72, 4, HAT_GOLD); // Gold border trim
+
+            // Raised Crown blocks
+            drawBlock(cx - 18, headY - 47, 36, 10, HAT_BASE);
+            drawBlock(cx - 18, headY - 51, 36, 4, HAT_GOLD);
+
+            // Gold diamond bezel blocks
+            drawBlock(cx - 10, headY - 43, 20, 12, HAT_GOLD);
+            drawBlock(cx - 6, headY - 45, 12, 16, HAT_GOLD);
+
+            // Ruby red gem block
+            drawBlock(cx - 4, headY - 41, 8, 8, GEM_RED);
+            // Shine pixel
+            drawBlock(cx, headY - 41, 2, 2, '#ffffff');
+
+            // 8. Voxel Mouth (Speaking animation checks)
+            if (pose === 'speaking') {
+                const openH = 4 + Math.abs(Math.sin(time * 12)) * 8;
+                drawBlock(cx - 6, headY + 22 - openH/2, 12, openH, '#501111');
+            } else {
+                // Pixel smile line
+                drawBlock(cx - 8, headY + 20, 16, 3, '#501111');
+                drawBlock(cx - 11, headY + 17, 3, 3, '#501111');
+                drawBlock(cx + 8, headY + 17, 3, 3, '#501111');
+            }
+
+            // 9. Status & Particle Pixel rings
             ctx.shadowBlur = 0;
 
-            // Draw status indicator circle on the bottom-right corner
-            ctx.fillStyle = currentColor;
-            ctx.beginPath();
-            ctx.arc(cx + 120, cy + 120, 8, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Pulse ring around status indicator
+            // Halo above head (square pixel path)
             ctx.strokeStyle = currentColor;
-            ctx.lineWidth = 2;
-            const indicatorPulse = 8 + (time * 10) % 15;
-            ctx.beginPath();
-            ctx.arc(cx + 120, cy + 120, indicatorPulse, 0, Math.PI * 2);
-            ctx.stroke();
+            ctx.lineWidth = 4;
+            ctx.strokeRect(cx - 30, headY - 65, 60, 10);
 
-            // Swirling particle accents
-            ctx.fillStyle = currentColor;
-            for (let i = 0; i < 6; i++) {
-                const angle = time * 0.4 + (i * Math.PI / 3);
-                const px = cx + Math.cos(angle) * 75;
-                const py = headY + Math.sin(angle * 2) * 20 - 10;
-                ctx.beginPath();
-                ctx.arc(px, py, 2.5, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            // Side indicators
+            drawBlock(cx + 80, cy + 100, 6, 6, currentColor);
+            drawBlock(cx + 88, cy + 100, 8, 8, currentColor);
 
             requestAnimationFrame(draw);
         }
 
-        // Run
         draw();
     </script>
 </body>
