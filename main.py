@@ -16,15 +16,22 @@ def run_os_thread(voice_mode):
     # Initialize the Zero Kernel inside the background thread
     print("[Kernel] Starting kernel components...")
     kernel = ZeroKernel()
-    print("[Kernel] Database, Brain, Planner, and System Agents initialized.")
+    print("[Kernel] v0.3 — Database, Brain, Decision Engine, Memory, Planner, State initialized.")
     print("=" * 60)
     
-    # Proactive Suggestion check on boot
-    boot_suggestion = kernel.get_proactive_suggestion()
-    if boot_suggestion:
-        time.sleep(1.5)
-        print("\n[Proactive Planner]")
-        kernel.voice.speak(boot_suggestion)
+    # ── v0.3: Startup Briefing (replaces simple proactive suggestion) ──
+    time.sleep(1.0)
+    print("\n[Zero — Startup Briefing]")
+    briefing = kernel.get_startup_briefing()
+    kernel.voice.speak(briefing)
+    print("-" * 60)
+    
+    # Also check for proactive suggestions
+    suggestion = kernel.get_proactive_suggestion()
+    if suggestion:
+        time.sleep(0.5)
+        print("\n[Zero — Proactive Suggestion]")
+        kernel.voice.speak(suggestion)
         print("-" * 60)
 
     is_awake = False
@@ -46,7 +53,9 @@ def run_os_thread(voice_mode):
                     command = kernel.voice.listen_for_speech(timeout=6)
                     if command:
                         if command.lower() in ["stop", "exit", "bye"]:
-                            kernel.voice.speak("Goodbye Varun.")
+                            # v0.3: Clean shutdown with session save
+                            wrapup = kernel.shutdown()
+                            kernel.voice.speak(wrapup)
                             break
                         
                         set_avatar_state("thinking")
@@ -68,7 +77,9 @@ def run_os_thread(voice_mode):
                         set_avatar_state("listening")
                         print("Zero: Yes Varun? (Awaiting command...)")
                     elif user_input.lower() in ["exit", "quit", "stop", "bye"]:
-                        print("Zero: Goodbye Varun.")
+                        # v0.3: Clean shutdown with session save
+                        wrapup = kernel.shutdown()
+                        print(wrapup)
                         break
                     else:
                         set_avatar_state("thinking")
@@ -79,7 +90,9 @@ def run_os_thread(voice_mode):
                     command = input("zero-os (active)> ").strip()
                     if command:
                         if command.lower() in ["exit", "quit", "stop", "bye"]:
-                            print("Zero: Goodbye Varun.")
+                            # v0.3: Clean shutdown with session save
+                            wrapup = kernel.shutdown()
+                            print(wrapup)
                             break
                         set_avatar_state("thinking")
                         response = kernel.handle_command(command)
@@ -89,10 +102,19 @@ def run_os_thread(voice_mode):
                         is_awake = False
                         
         except KeyboardInterrupt:
-            print("\nZero: Shutting down. Goodbye Varun.")
+            print("\n[Zero] Emergency shutdown...")
+            try:
+                kernel.shutdown()
+            except Exception:
+                pass
+            print("Zero: Goodbye Varun. Session saved.")
             break
         except Exception as e:
             print(f"\n[Error] System loop exception: {e}")
+            try:
+                kernel.state.record_error()
+            except Exception:
+                pass
             time.sleep(2)
 
     # Clean shut down when exiting loop
@@ -106,9 +128,13 @@ def run_os_thread(voice_mode):
 def main():
     clear_screen()
     print("=" * 60)
-    print("                 ZERO AUTONOMOUS OPERATING SYSTEM             ")
-    print("                     Milestone 1 - Foundation                 ")
+    print("            ZERO AUTONOMOUS OPERATING SYSTEM               ")
+    print("             v0.3 — Intelligence Upgrade 🧠                ")
     print("=" * 60)
+    print()
+    print("  Modules: Brain | Memory | Goals | Planner | Reflection   ")
+    print("  New: Decision Engine | State Tracker | Session Context   ")
+    print()
     
     # Select Interaction Mode
     print("Select Mode:")
